@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from collections import OrderedDict
 import csv
 import shutil
+import time
+import requests
+
 
 @dataclass
 class ResultRecord:
@@ -278,11 +281,47 @@ def save_results_to_csv(results: Results, filename: str, append: bool = False):
 
     print(f"Results saved to {filename}")
 
+def get_problem_prompt(n: str):
+    import glob
+    prompt_file = glob.glob(f"VerilogEval/dataset_spec-to-rtl/Prob{n}/*_prompt.txt")[0]
+    with open(prompt_file, "r") as file:
+        return file.read()
+
+def call_diann(n: str):
+    url = "http://localhost:8080/api/brute"
+    prompt = get_problem_prompt(n)
+    print(f"Problem: {n}")
+    print(f"Prompt: {prompt}")
+    payload = {"prompt": prompt, "solution_folder": f"VerilogEval/dataset_spec-to-rtl/Prob{n}/solution"}
+    response = requests.post(url, json=payload)
+    print(f"Called Diann successfully.")
+    return response.json()
+def test_solution(n: str):
+    print(f"Testing solution for problem {n}")
+    subprocess.run(f'iverilog -g2012 -o VerilogEval/dataset_spec-to-rtl/Prob{n}/prob{n}_tb $(find VerilogEval/dataset_spec-to-rtl/Prob{n}/solution -type f -name "*.sv") $(find VerilogEval/dataset_spec-to-rtl/Prob{n}/test -type f -name "*.sv")', shell=True)
+    with open(f"VerilogEval/dataset_spec-to-rtl/Prob{n}/test_output.txt", "w") as output_file:
+        subprocess.run(f"./VerilogEval/dataset_spec-to-rtl/Prob{n}/prob{n}_tb", shell=True, stdout=output_file, stderr=subprocess.STDOUT)
+    print(f"Test output saved to VerilogEval/dataset_spec-to-rtl/Prob{n}/test_output.txt")
+    
+    # Print the output
+    with open(f"VerilogEval/dataset_spec-to-rtl/Prob{n}/test_output.txt", "r") as output_file:
+        print("Test output:")
+        print(output_file.read())
+
+
+# prompt = "module TopModule (input wire in, output wire out); assign out = in; endmodule"
+# response = call_diann(prompt)
+
+# print(response.status_code)
+# print(response.json())
+
 
 # Example usage
-base_path = "VerilogEval/dataset_spec-to-rtl"
-problem = "Prob001"
-results = Results(wide=True)
-analyze_result(results, problem, 1, base_path)
-print(results.data)
-save_results_to_csv(results, "VerilogEval/results.csv", append=True)
+
+if __name__ == "__main__":
+    for n in range(1, 157):
+        n_str = f"{n:03d}"
+        print(f"Processing problem {n_str}")
+        # call_diann(n_str)
+        # test_solution(n_str)
+
